@@ -1,0 +1,136 @@
+version: "3.8"
+
+services:
+  # ===========================================
+  # Infrastructure Services
+  # ===========================================
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: betting-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: betting
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - betting-network
+
+  # Redis for caching and pub/sub
+  redis:
+    image: redis:7-alpine
+    container_name: betting-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - betting-network
+
+  # NATS for message transport
+  nats:
+    image: nats:2.10-alpine
+    container_name: betting-nats
+    restart: unless-stopped
+    ports:
+      - "4222:4222"   # Client connections
+      - "8222:8222"   # HTTP monitoring
+      - "6222:6222"   # Cluster routing
+    command: >
+      -js
+      -sd /data
+      -m 8222
+    volumes:
+      - nats_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - betting-network
+
+  # ===========================================
+  # Microservices (uncomment as needed)
+  # ===========================================
+
+  # API Gateway
+  # api-gateway:
+  #   build:
+  #     context: ../../
+  #     dockerfile: infrastructure/docker/Dockerfile
+  #     target: api-gateway
+  #   container_name: betting-api-gateway
+  #   restart: unless-stopped
+  #   ports:
+  #     - "3000:3000"
+  #     - "3001:3001"
+  #   environment:
+  #     - NODE_ENV=development
+  #     - TRANSPORTER=nats://nats:4222
+  #     - CACHER=redis://redis:6379
+  #     - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/betting
+  #     - REDIS_URL=redis://redis:6379
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #     nats:
+  #       condition: service_healthy
+  #   networks:
+  #     - betting-network
+
+  # Bet Service
+  # bet-service:
+  #   build:
+  #     context: ../../
+  #     dockerfile: infrastructure/docker/Dockerfile
+  #     target: bet-service
+  #   container_name: betting-bet-service
+  #   restart: unless-stopped
+  #   environment:
+  #     - NODE_ENV=development
+  #     - TRANSPORTER=nats://nats:4222
+  #     - CACHER=redis://redis:6379
+  #     - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/betting
+  #     - REDIS_URL=redis://redis:6379
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #     nats:
+  #       condition: service_healthy
+  #   networks:
+  #     - betting-network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  nats_data:
+    driver: local
+
+networks:
+  betting-network:
+    driver: bridge

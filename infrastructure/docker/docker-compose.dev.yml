@@ -1,0 +1,98 @@
+version: "3.8"
+
+# Development override - use with:
+# docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  # ===========================================
+  # Development Services with Hot Reload
+  # ===========================================
+
+  # All services in one container for development
+  app:
+    build:
+      context: ../../
+      dockerfile: infrastructure/docker/Dockerfile
+      target: base
+    container_name: betting-app-dev
+    restart: unless-stopped
+    command: npm run dev
+    ports:
+      - "3000:3000"   # API
+      - "3001:3001"   # Socket.IO
+      - "9229:9229"   # Node debugger
+    environment:
+      - NODE_ENV=development
+      - LOG_LEVEL=debug
+      - TRANSPORTER=nats://nats:4222
+      - CACHER=redis://redis:6379
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/betting
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - ../../:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    networks:
+      - betting-network
+
+  # PostgreSQL with extended logging for development
+  postgres:
+    command: >
+      postgres
+      -c log_statement=all
+      -c log_duration=on
+      -c log_min_duration_statement=100
+
+  # Redis with verbose logging
+  redis:
+    command: redis-server --appendonly yes --loglevel verbose
+
+  # NATS with debug logging
+  nats:
+    command: >
+      -js
+      -sd /data
+      -m 8222
+      -DV
+
+  # Redis Commander - Web UI for Redis
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: betting-redis-commander
+    restart: unless-stopped
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    networks:
+      - betting-network
+
+  # pgAdmin - Web UI for PostgreSQL
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: betting-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@betting.local
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "8082:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+    networks:
+      - betting-network
+
+volumes:
+  pgadmin_data:
+    driver: local
