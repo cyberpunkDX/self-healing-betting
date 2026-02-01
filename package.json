@@ -25,7 +25,8 @@
     "docker:infra:stop": "docker-compose -f infrastructure/docker/docker-compose.yml down",
     "docker:dev": "docker-compose -f infrastructure/docker/docker-compose.yml -f infrastructure/docker/docker-compose.dev.yml up",
     "docker:dev:build": "docker-compose -f infrastructure/docker/docker-compose.yml -f infrastructure/docker/docker-compose.dev.yml up --build",
-    "docker:logs": "docker-compose -f infrastructure/docker/docker-compose.yml logs -f"
+    "docker:logs": "docker-compose -f infrastructure/docker/docker-compose.yml logs -f",
+    "repl": "node repl.js"
   },
   "keywords": [
     "betting",
